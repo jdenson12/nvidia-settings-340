@@ -1,0 +1,80 @@
+diff -Naur nvidia-settings-340.17.old/src/libXNVCtrl/Makefile nvidia-settings-340.17/src/libXNVCtrl/Makefile
+--- nvidia-settings-340.17.old/src/libXNVCtrl/Makefile	2014-06-09 21:07:30.043066045 +0200
++++ nvidia-settings-340.17/src/libXNVCtrl/Makefile	2014-06-09 21:07:57.926852104 +0200
+@@ -31,8 +31,6 @@
+ # assign variables
+ ##############################################################################
+ 
+-LIBXNVCTRL = libXNVCtrl.a
+-
+ LIBXNVCTRL_PROGRAM_NAME = "libXNVCtrl"
+ 
+ LIBXNVCTRL_VERSION := $(NVIDIA_VERSION)
+@@ -54,11 +52,17 @@
+ 
+ .PHONY: clean
+ 
+-all: $(LIBXNVCTRL)
++all: $(LIBXNVCTRL_PROGRAM_NAME).a $(LIBXNVCTRL_PROGRAM_NAME).so
+ 
+-$(LIBXNVCTRL) : $(OBJS)
++$(LIBXNVCTRL_PROGRAM_NAME).a : $(OBJS)
+ 	$(AR) ru $@ $(OBJS)
+ 
++$(LIBXNVCTRL_PROGRAM_NAME).so: $(OBJS)
++	$(RM) $@ $@.*
++	$(CC) -shared -Wl,-soname=$@.0 -o $@.$(NVIDIA_VERSION) $(LDFLAGS) $^ -lXext -lX11
++	ln -s $@.$(NVIDIA_VERSION) $@.0
++	ln -s $@.0 $@
++
+ # define the rule to build each object file
+ $(foreach src,$(SRC),$(eval $(call DEFINE_OBJECT_RULE,TARGET,$(src))))
+ 
+@@ -66,5 +70,5 @@
+ $(eval $(call DEFINE_STAMP_C_RULE, $(OBJS),$(LIBXNVCTRL_PROGRAM_NAME)))
+ 
+ clean:
+-	rm -rf $(LIBXNVCTRL) *~ $(STAMP_C) \
+-		$(OUTPUTDIR)/*.o $(OUTPUTDIR)/*.d
++	rm -rf $(LIBXNVCTRL_PROGRAM_NAME).a $(LIBXNVCTRL_PROGRAM_NAME).so* \
++		*~ $(STAMP_C) $(OUTPUTDIR)/*.o $(OUTPUTDIR)/*.d
+diff -Naur nvidia-settings-340.17.old/src/Makefile nvidia-settings-340.17/src/Makefile
+--- nvidia-settings-340.17.old/src/Makefile	2014-06-09 21:07:30.058065930 +0200
++++ nvidia-settings-340.17/src/Makefile	2014-06-09 21:07:57.926852104 +0200
+@@ -84,6 +84,13 @@
+ XNVCTRL_DIR             ?= libXNVCtrl
+ XNVCTRL_MAKEFILE        ?= Makefile
+ XNVCTRL_ARCHIVE         ?= $(XNVCTRL_DIR)/libXNVCtrl.a
++XNVCTRL_SHARED          ?= $(XNVCTRL_DIR)/libXNVCtrl.so.0
++
++ifeq ($(XNVCTRL_LIB_STATIC),0)
++  XNVCTRL_LIB           ?= $(XNVCTRL_SHARED)
++endif
++XNVCTRL_LIB             ?= $(XNVCTRL_ARCHIVE)
++
+ XCONFIG_PARSER_DIR      ?= XF86Config-parser
+ COMMON_UTILS_DIR        ?= common-utils
+ COMMON_UNIX_DIR         ?= common-unix
+@@ -203,9 +210,12 @@
+ 	$(MKDIR) $(BINDIR)
+ 	$(INSTALL) $(INSTALL_BIN_ARGS) $< $(BINDIR)/$(notdir $<)
+ 
+-$(NVIDIA_SETTINGS): $(OBJS) $(XNVCTRL_ARCHIVE)
++$(XNVCTRL_ARCHIVE) $(XNVCTRL_SHARED):
++	$(MAKE) -C $(XNVCTRL_DIR)
++
++$(NVIDIA_SETTINGS): $(OBJS) $(XNVCTRL_LIB)
+ 	$(call quiet_cmd,LINK) $(CFLAGS) $(LDFLAGS) $(BIN_LDFLAGS) -o $@ $(OBJS) \
+-	    $(XNVCTRL_ARCHIVE) $(LIBS)
++	    $(XNVCTRL_LIB) $(LIBS)
+ 	$(call quiet_cmd,STRIP_CMD) $@
+ 
+ # define the rule to build each object file
+@@ -221,6 +231,7 @@
+ 	@$(MAKE) -C $(XNVCTRL_DIR) -f $(XNVCTRL_MAKEFILE)
+ 
+ clean clobber:
++	$(MAKE) -C $(XNVCTRL_DIR) clean
+ 	rm -rf $(NVIDIA_SETTINGS) *~ $(STAMP_C) \
+ 		$(OUTPUTDIR)/*.o $(OUTPUTDIR)/*.d
+ 	@$(MAKE) -C $(XNVCTRL_DIR) -f $(XNVCTRL_MAKEFILE) clean
