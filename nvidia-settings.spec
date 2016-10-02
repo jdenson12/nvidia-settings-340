@@ -1,5 +1,5 @@
 Name:           nvidia-settings
-Version:        340.96
+Version:        340.98
 Release:        1%{?dist}
 Summary:        Configure the NVIDIA graphics driver
 Epoch:          2
@@ -117,6 +117,9 @@ desktop-file-validate %{buildroot}%{_sysconfdir}/xdg/autostart/%{name}-load.desk
 %{_libdir}/libXNVCtrl.so
 
 %changelog
+* Sun Oct 02 2016 Simone Caronni <negativo17@gmail.com> - 2:340.98-1
+- Update to 340.98.
+
 * Tue Nov 17 2015 Simone Caronni <negativo17@gmail.com> - 2:340.96-1
 - Update to 340.96.
 
