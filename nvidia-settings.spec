@@ -1,21 +1,22 @@
 Name:           nvidia-settings
 Version:        340.104
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        Configure the NVIDIA graphics driver
 Epoch:          2
 License:        GPLv2+
 URL:            http://www.nvidia.com/object/unix.html
-ExclusiveArch:  %{ix86} x86_64 armv7hl
+ExclusiveArch:  %{ix86} x86_64
 
-Source0:        ftp://download.nvidia.com/XFree86/%{name}/%{name}-%{version}.tar.bz2
+Source0:        https://github.com/NVIDIA/%{name}/archive/%{version}.tar.gz#/%{name}-%{version}.tar.gz
 Source1:        %{name}-load.desktop
+Source2:        %{name}.appdata.xml
 Patch0:         %{name}-256.35-validate.patch
 Patch1:         %{name}-340.17-libXNVCtrl-so.patch
 
 BuildRequires:  desktop-file-utils
 BuildRequires:  gtk2-devel > 2.4
 BuildRequires:  jansson-devel
-BuildRequires:  libvdpau-devel
+BuildRequires:  libvdpau-devel >= 1.0
 BuildRequires:  libXxf86vm-devel
 BuildRequires:  libXext-devel
 BuildRequires:  libXrandr-devel
@@ -23,7 +24,10 @@ BuildRequires:  libXv-devel
 BuildRequires:  m4
 BuildRequires:  mesa-libGL-devel
 
-Requires:       nvidia-libXNVCtrl = %{?epoch}:%{version}-%{release}
+Requires:       nvidia-libXNVCtrl%{?_isa} = %{?epoch}:%{version}-%{release}
+Requires:       nvidia-driver%{?_isa} = %{?epoch}:%{version}
+# Loaded at runtime
+Requires:       libvdpau%{?_isa} >= 0.9
 
 Obsoletes:      nvidia-settings-desktop < %{?epoch}:%{version}-%{release}
 
@@ -40,9 +44,8 @@ Obsoletes:      libXNVCtrl < %{?epoch}:%{version}-%{release}
 Provides:       libXNVCtrl = %{?epoch}:%{version}-%{release}
 
 %description -n nvidia-libXNVCtrl
-This library provides the NV-CONTROL API for communicating with
-the proprietary NVidia xorg driver. It is required for proper operation of the
-%{name} utility.
+This library provides the NV-CONTROL API for communicating with the proprietary
+NVidia xorg driver. It is required for proper operation of the %{name} utility.
 
 %package -n nvidia-libXNVCtrl-devel
 Summary:        Development files for libXNVCtrl
@@ -58,22 +61,24 @@ developing applications that use the NV-CONTROL API.
 %patch0 -p1
 %patch1 -p1
 
-find . -name "*.la" -delete
-find . -name "*.a" -delete
-# rpmlint fixes
-find . -name "*.h" -exec chmod 644 {} \;
+# Remove bundled jansson
+rm -fr src/jansson
 
-sed -i -e 's|/usr/local|%{_prefix}|g' utils.mk
-sed -i -e 's|-lXxf86vm|-lXxf86vm -ldl -lm|g' Makefile
+# Remove additional CFLAGS added when enabling DEBUG
+sed -i '/+= -O0 -g/d' utils.mk src/libXNVCtrl/utils.mk
+
+# Change all occurrences of destinations in each utils.mk.
+sed -i -e 's|$(PREFIX)/lib|$(PREFIX)/%{_lib}|g' utils.mk src/libXNVCtrl/utils.mk
 
 %build
-export CFLAGS="$RPM_OPT_FLAGS"
+export CFLAGS="%{optflags}"
+export LDFLAGS="%{?__global_ldflags}"
 make %{?_smp_mflags} \
-    NV_VERBOSE=1 \
-    X_LDFLAGS="-L%{_libdir}" \
-    STRIP_CMD="true" \
+    DEBUG=1 \
     NV_USE_BUNDLED_LIBJANSSON=0 \
     XNVCTRL_LIB_STATIC=0
+    NV_VERBOSE=1 \
+    PREFIX=%{_prefix} \
 
 %install
 # Install libXNVCtrl
@@ -84,7 +89,13 @@ chmod 755 %{buildroot}%{_libdir}/*.so*
 cp -af src/libXNVCtrl/*.h %{buildroot}%{_includedir}/NVCtrl/
 
 # Install main program
-make install DESTDIR=%{buildroot} INSTALL="install -p" NV_USE_BUNDLED_LIBJANSSON=0
+%make_install \
+    DEBUG=1 \
+    NV_USE_BUNDLED_LIBJANSSON=0 \
+    NV_VERBOSE=1 \
+    PREFIX=%{_prefix} \
+    XNVCTRL_LIB_STATIC=0
+
 
 # Install desktop file
 mkdir -p %{buildroot}%{_datadir}/{applications,pixmaps}
@@ -96,19 +107,40 @@ desktop-file-validate %{buildroot}/%{_datadir}/applications/%{name}.desktop
 install -p -D -m 644 %{SOURCE1} %{buildroot}%{_sysconfdir}/xdg/autostart/%{name}-load.desktop
 desktop-file-validate %{buildroot}%{_sysconfdir}/xdg/autostart/%{name}-load.desktop
 
+%if 0%{?fedora}
+# install AppData and add modalias provides
+mkdir -p %{buildroot}%{_datadir}/appdata
+install -p -m 0644 %{SOURCE2} %{buildroot}%{_datadir}/appdata/
+%endif
+
 %post -n nvidia-libXNVCtrl -p /sbin/ldconfig
 
 %postun -n nvidia-libXNVCtrl -p /sbin/ldconfig
 
+%post
+/sbin/ldconfig
+%if 0%{?rhel} == 7
+/usr/bin/update-desktop-database &> /dev/null || :
+%endif
+
+%postun
+/sbin/ldconfig
+%if 0%{?rhel} == 7
+/usr/bin/update-desktop-database &> /dev/null || :
+%endif
+
 %files
 %{_bindir}/%{name}
+%if 0%{?fedora}
+%{_datadir}/appdata/%{name}.appdata.xml
+%endif
 %{_datadir}/applications/%{name}.desktop
 %{_datadir}/pixmaps/%{name}.png
 %{_mandir}/man1/%{name}.*
 %{_sysconfdir}/xdg/autostart/%{name}-load.desktop
 
 %files -n nvidia-libXNVCtrl
-%doc COPYING
+%license COPYING
 %{_libdir}/libXNVCtrl.so.*
 
 %files -n nvidia-libXNVCtrl-devel
@@ -117,6 +149,11 @@ desktop-file-validate %{buildroot}%{_sysconfdir}/xdg/autostart/%{name}-load.desk
 %{_libdir}/libXNVCtrl.so
 
 %changelog
+* Sat Dec 23 2017 Jemma Denson <jdenson@gmail.com> - 2:340.104-2
+- Merge in negativo17 changes to date:
+- Update SPEC file, set proper compiler flags on Fedora 2
+7.
+
 * Fri Dec 22 2017 Jemma Denson <jdenson@gmail.com> - 2:340.104-1
 - Update to 340.104.
 
