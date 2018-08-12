@@ -1,6 +1,6 @@
 Name:           nvidia-settings
-Version:        340.104
-Release:        2%{?dist}
+Version:        340.107
+Release:        1%{?dist}
 Summary:        Configure the NVIDIA graphics driver
 Epoch:          2
 License:        GPLv2+
@@ -149,6 +149,9 @@ install -p -m 0644 %{SOURCE2} %{buildroot}%{_datadir}/appdata/
 %{_libdir}/libXNVCtrl.so
 
 %changelog
+* Sun Aug 12 2018 Jemma Denson <jdenson@gmail.com> - 2:340.107-1
+- Update to 340.107
+
 * Sat Dec 23 2017 Jemma Denson <jdenson@gmail.com> - 2:340.104-2
 - Merge in negativo17 changes to date:
 - Update SPEC file, set proper compiler flags on Fedora 2
